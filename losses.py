@@ -6,6 +6,7 @@ import itertools
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
 import torch.optim
 import torch.utils.data
@@ -61,3 +62,11 @@ def JMMDLoss(source_list, target_list, kernel_mul=2.0, kernel_num=5, fix_sigma=N
         loss += joint_kernels[s1, s2] + joint_kernels[t1, t2]
         loss -= joint_kernels[s1, t2] + joint_kernels[s2, t1]
     return loss / float(batch_size)
+
+
+def CrossEntropyLoss(logits, target):
+    loss = torch.pow(logits - target, 2)
+    #loss = loss + -logits * torch.log(torch.clamp(logits, 0.001, 1))
+    #loss = -logits * torch.log(torch.clamp(target, 0.001, 1))
+    loss = torch.mean(torch.sum(loss, 1))
+    return loss

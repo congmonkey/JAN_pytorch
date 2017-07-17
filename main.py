@@ -28,7 +28,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
-parser.add_argument('--model', '-m', metavar='MODEL', default='dan',
+parser.add_argument('--model', '-m', metavar='MODEL', default='jan',
                     choices=['dan', 'jan'])
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -52,6 +52,8 @@ parser.add_argument('--power', default=0.75, type=float, metavar='M',
                     help='inv power')
 parser.add_argument('--alpha', default=1., type=float, metavar='M',
                     help='mmd loss weight')
+parser.add_argument('--beta', default=.3, type=float, metavar='M',
+                    help='cross entropy weight')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=100, type=int,
@@ -88,7 +90,8 @@ def main():
         SGD_param = [
             {'params': model.origin_feature.parameters(), 'lr': 1,},
             {'params': model.fcb.parameters(), 'lr': 10,},
-            {'params': model.fc.parameters(), 'lr': 10}
+            {'params': model.fc_source.parameters(), 'lr': 10},
+            {'params': model.fc_target.parameters(), 'lr': 10}
         ]
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
