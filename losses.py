@@ -65,8 +65,11 @@ def JMMDLoss(source_list, target_list, kernel_mul=2.0, kernel_num=5, fix_sigma=N
 
 
 def CrossEntropyLoss(logits, target):
+    loss = -logits * torch.log(torch.clamp(target.detach(), 0.001, 1))
+    loss = torch.mean(torch.sum(loss, 1))
+    return loss
+
+def L2Distance(source, target):
     loss = torch.pow(logits - target, 2)
-    #loss = loss + -logits * torch.log(torch.clamp(logits, 0.001, 1))
-    #loss = -logits * torch.log(torch.clamp(target, 0.001, 1))
     loss = torch.mean(torch.sum(loss, 1))
     return loss
