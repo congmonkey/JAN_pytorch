@@ -45,30 +45,19 @@ class Net(nn.Module):
             self.fc= nn.Linear(self.feature_dim, args.classes)
         elif args.model == 'jan':
             self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
-            self.fc_source = nn.Linear(args.bottleneck, args.classes)
-            self.fc_target = nn.Linear(args.bottleneck, args.classes)
-    def forward(self, x, output=None):
+            self.fc = nn.Linear(args.bottleneck, args.classes)
+            self.fcr = nn.Linear(args.bottleneck, self.feature_dim)
+    def forward(self, x):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
         x = x.view(x.size(0), -1)
         if self.model == 'jan':
-            x = self.fcb(x)
-        else:
-            y = self.fc(x)
-            return y, x
-        ys, yt = None, None
-        if output == 'source':
-            ys = self.fc_source(x)
-            return ys, x
-        elif output == 'target':
-            yt = self.fc_target(x)
-            return yt, x
-        else:
-            ys = self.fc_source(x)
-            yt = self.fc_target(x)
-            return ys, yt, x
+            x = F.relu(self.fcb(x), inplace=True)
+            xr = F.relu(self.fcr(x), inplace=True)
+        y = self.fc(x)
+        return y, x, xr
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -98,10 +87,10 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         label_var = torch.autograd.Variable(label)
 
         if args.model == 'jan':
-            source_output, source_feature = model(source_var, output='source')
-            cross_output, target_output, target_feature = model(target_var)
+            source_output, source_feature, _ = model(source_var)
+            target_output, target_feature, _ = model(target_var)
         elif args.model == 'dan':
-            source_output, source_feature = model(source_var, output='source')
+            source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
 
         acc_loss = criterion(source_output, label_var)
@@ -110,18 +99,14 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
                    MMDLoss(source_feature, target_feature)
         if args.model == 'jan':
             softmax = nn.Softmax()
-            entropy_losses = CrossEntropyLoss(softmax(target_output), softmax(cross_output))
             loss = acc_loss + args.alpha * JMMDLoss(
                 [source_feature, softmax(source_output)],
-                [target_feature, softmax(target_output)]) +\
-                args.beta * entropy_losses
+                [target_feature, softmax(target_output)])
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
         top1.update(prec1[0], args.batch_size)
-        if args.model == 'jan':
-            entropy_loss.update(entropy_losses.data[0], args.batch_size)
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -136,10 +121,10 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             print('Iter: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'Loss {loss.val:.4f} ({entropy_loss.val:.4f})\t'
+                  'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                    i, args.train_iter, batch_time=batch_time,
-                      data_time=data_time, loss=losses, top1=top1, entropy_loss = entropy_loss))
+                      data_time=data_time, loss=losses, top1=top1))
 
         if i % args.test_iter == 0 and i != 0:
             validate(val_loader, model, criterion, args)
@@ -167,7 +152,7 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _ = model(input_var, output='target')
+        output, _, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

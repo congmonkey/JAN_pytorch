@@ -90,8 +90,7 @@ def main():
         SGD_param = [
             {'params': model.origin_feature.parameters(), 'lr': 1,},
             {'params': model.fcb.parameters(), 'lr': 10,},
-            {'params': model.fc_source.parameters(), 'lr': 10},
-            {'params': model.fc_target.parameters(), 'lr': 10}
+            {'params': model.fc.parameters(), 'lr': 10},
         ]
 
     optimizer = torch.optim.SGD(model.parameters(), args.lr,

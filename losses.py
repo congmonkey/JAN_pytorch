@@ -28,7 +28,7 @@ def guassian_kernel(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None
     bandwidth *= kernel_mul**(float(-kernel_num)/2)
     bandwidth_list = [bandwidth * (kernel_mul**kernel_num) for i in xrange(kernel_num)]
     kernel_val = [torch.exp(L2_distance/-bandwidth_temp) for bandwidth_temp in bandwidth_list]
-    return sum(kernel_val)
+    return sum(kernel_val)/len(kernel_val)
 
 def MMDLoss(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
     batch_size = int(source.size()[0])
