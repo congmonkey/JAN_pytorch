@@ -49,15 +49,17 @@ class Net(nn.Module):
             self.fcr = nn.Linear(args.bottleneck, self.feature_dim)
     def forward(self, x):
         x = self.origin_feature(x)
+        xo = x
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
         x = x.view(x.size(0), -1)
         if self.model == 'jan':
-            x = F.relu(self.fcb(x), inplace=True)
-            xr = F.relu(self.fcr(x), inplace=True)
+            x = self.fcb(x)
+            xr = self.fcr(x)
+            dxr = L2Distance(xr, xo)
         y = self.fc(x)
-        return y, x, xr
+        return y, x, dxr
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -88,7 +90,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
 
         if args.model == 'jan':
             source_output, source_feature, _ = model(source_var)
-            target_output, target_feature, _ = model(target_var)
+            target_output, target_feature, distan_recons = model(target_var)
         elif args.model == 'dan':
             source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
@@ -101,7 +103,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             softmax = nn.Softmax()
             loss = acc_loss + args.alpha * JMMDLoss(
                 [source_feature, softmax(source_output)],
-                [target_feature, softmax(target_output)])
+                [target_feature, softmax(target_output)]) +\
+                args.beta * distan_recons
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 

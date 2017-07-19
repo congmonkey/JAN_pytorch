@@ -70,6 +70,6 @@ def CrossEntropyLoss(logits, target):
     return loss
 
 def L2Distance(source, target):
-    loss = torch.pow(logits - target, 2)
+    loss = torch.pow(source - target, 2)
     loss = torch.mean(torch.sum(loss, 1))
     return loss
