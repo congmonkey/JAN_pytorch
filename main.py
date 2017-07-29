@@ -54,6 +54,8 @@ parser.add_argument('--alpha', default=1., type=float, metavar='M',
                     help='mmd loss weight')
 parser.add_argument('--beta', default=.3, type=float, metavar='M',
                     help='cross entropy weight')
+parser.add_argument('--gammaC', default=1., type=float, metavar='M',
+                    help='C weight')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--print-freq', '-p', default=100, type=int,
@@ -75,25 +77,26 @@ def main():
 
     # create model
     model = Net(args).cuda()
-    print(model)
+    ### print(model)
     print(args)
 
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
     if args.model == 'dan':
-        SGD_param = [
+        args.SGD_param = [
             {'params': model.origin_feature.parameters(), 'lr': 1,},
             {'params': model.fc.parameters(), 'lr': 10}
         ]
     elif args.model == 'jan':
-        SGD_param = [
+        args.SGD_param = [
             {'params': model.origin_feature.parameters(), 'lr': 1,},
             {'params': model.fcb.parameters(), 'lr': 10,},
             {'params': model.fc.parameters(), 'lr': 10},
+            {'params': model.C.parameters(), 'lr': args.gammaC}
         ]
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
 

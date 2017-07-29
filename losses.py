@@ -73,3 +73,8 @@ def L2Distance(source, target):
     loss = torch.pow(source - target, 2)
     loss = torch.mean(torch.sum(loss, 1))
     return loss
+
+def x_Cy(x, y, C, b):
+    loss = torch.pow(x - F.linear(y, C, b), 2)
+    loss = torch.mean(torch.sum(loss, 1))
+    return loss

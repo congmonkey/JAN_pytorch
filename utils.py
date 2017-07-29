@@ -46,7 +46,8 @@ class Net(nn.Module):
         elif args.model == 'jan':
             self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
             self.fc = nn.Linear(args.bottleneck, args.classes)
-            self.fcr = nn.Linear(args.bottleneck, self.feature_dim)
+            self.C = nn.Linear(args.classes, args.bottleneck)
+        self.softmax = nn.Softmax()
     def forward(self, x):
         x = self.origin_feature(x)
         xo = x
@@ -56,10 +57,11 @@ class Net(nn.Module):
         x = x.view(x.size(0), -1)
         if self.model == 'jan':
             x = self.fcb(x)
-            xr = self.fcr(x)
-            dxr = L2Distance(xr, xo)
         y = self.fc(x)
-        return y, x, dxr
+        ys = self.softmax(y)
+        src_recons = x_Cy(x, ys, self.C.weight, self.C.bias)
+        tar_recons = x_Cy(x, ys, self.C.weight.detach(), self.C.bias.detach())
+        return y, x, src_recons, tar_recons
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -67,6 +69,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
+    loss_1 = AverageMeter()
     entropy_loss = AverageMeter()
 
     source_cycle = itertools.cycle(source_loader)
@@ -89,8 +92,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         label_var = torch.autograd.Variable(label)
 
         if args.model == 'jan':
-            source_output, source_feature, _ = model(source_var)
-            target_output, target_feature, distan_recons = model(target_var)
+            source_output, source_feature, src_rec, _ = model(source_var)
+            target_output, target_feature, _, tar_rec = model(target_var)
         elif args.model == 'dan':
             source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
@@ -104,11 +107,13 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             loss = acc_loss + args.alpha * JMMDLoss(
                 [source_feature, softmax(source_output)],
                 [target_feature, softmax(target_output)]) +\
-                args.beta * distan_recons
+                args.beta * (src_rec + tar_rec)
+            lrecons = src_rec + tar_rec
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
+        loss_1.update(lrecons.data[0], args.batch_size)
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step
@@ -123,11 +128,11 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         if i % args.print_freq == 0:
             print('Iter: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
+                  'Loss {src_rec.data[0]:.4f} {tar_rec.data[0]:.4f}\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                    i, args.train_iter, batch_time=batch_time,
-                      data_time=data_time, loss=losses, top1=top1))
+                      src_rec=src_rec, tar_rec=tar_rec, loss=losses, top1=top1))
 
         if i % args.test_iter == 0 and i != 0:
             validate(val_loader, model, criterion, args)
@@ -135,6 +140,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             batch_time.reset()
             data_time.reset()
             losses.reset()
+            loss_1.reset()
             top1.reset()
 
 
@@ -155,7 +161,7 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _, _ = model(input_var)
+        output, _, _, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
@@ -210,7 +216,7 @@ def adjust_learning_rate(optimizer, iter_num, args):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = args.lr * (1 + args.gamma * iter_num) ** (-args.power)
     for i, param_group in enumerate(optimizer.param_groups):
-        param_group['lr'] = lr * (10 if i > 0 else 1)
+        param_group['lr'] = lr * args.SGD_param[i]['lr']
 
 
 def accuracy(output, target, topk=(1,)):
