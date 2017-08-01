@@ -66,7 +66,11 @@ class Net(nn.Module):
             self.fc = nn.Linear(self.feature_dim, args.classes)
         elif args.model == 'jan':
             self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
+            self.fcb.weight.data.normal_(0, 0.005)
+            self.fcb.bias.data.fill_(0.1)
             self.fc = nn.Linear(args.bottleneck, args.classes)
+            self.fc.weight.data.normal_(0, 0.01)
+            self.fc.bias.data.fill_(0.1)
 
             self.grl7 = GRLayer()
             dc_ip1 = nn.Linear(args.bottleneck, 1024)
@@ -193,8 +197,6 @@ def validate(val_loader, model, criterion, args):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
-        if i % 300:
-            continue
         target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
