@@ -15,7 +15,28 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 
+import math
+
 from losses import *
+
+global_iter = 0
+
+class GRLayer(torch.autograd.Function):
+    def __init__(self, max_iter=10000, alpha=10., high=1.):
+        super(GRLayer, self).__init__()
+        self.total = float(max_iter)
+        self.alpha = alpha
+        self.high = high
+        
+    def forward(self, input):
+        return input
+    
+    def backward(self, gradOutput):
+        global global_iter
+        prog = global_iter/self.total
+        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
+        return (-lr) * gradOutput
+
 
 ### Convert back-bone model
 class Net(nn.Module):
@@ -42,15 +63,25 @@ class Net(nn.Module):
         self.model = args.model
         self.arch = args.arch
         if args.model == 'dan':
-            self.fc= nn.Linear(self.feature_dim, args.classes)
+            self.fc = nn.Linear(self.feature_dim, args.classes)
         elif args.model == 'jan':
             self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
             self.fc = nn.Linear(args.bottleneck, args.classes)
-            self.C = nn.Linear(args.classes, args.bottleneck)
-        self.softmax = nn.Softmax()
+
+            self.grl7 = GRLayer()
+            self.dc7 = nn.Sequential()
+            self.dc7.add_module('ip1', nn.Linear(args.bottleneck, args.bottleneck*4))
+            self.dc7.add_module('relu1', nn.ReLU())
+            self.dc7.add_module('drop1', nn.Dropout(0.5))
+            self.dc7.add_module('ip2', nn.Linear(args.bottleneck*4, args.bottleneck*4))
+            self.dc7.add_module('relu2', nn.ReLU())
+            self.dc7.add_module('drop2', nn.Dropout(0.5))
+            self.dc7.add_module('ip3', nn.Linear(args.bottleneck*4, 1))
+            self.dc7.add_module('sig', nn.Sigmoid())
+            
+            self.dc8 = nn.Sequential()
     def forward(self, x):
         x = self.origin_feature(x)
-        xo = x
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
@@ -58,10 +89,9 @@ class Net(nn.Module):
         if self.model == 'jan':
             x = self.fcb(x)
         y = self.fc(x)
-        ys = self.softmax(y)
-        src_recons = x_Cy(x, ys, self.C.weight, self.C.bias)
-        tar_recons = x_Cy(x, ys, self.C.weight.detach(), self.C.bias.detach())
-        return y, x, src_recons, tar_recons
+        dc7 = self.grl7(x)
+        dc7 = self.dc7(dc7)
+        return y, x, dc7
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -69,7 +99,6 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    loss_1 = AverageMeter()
     entropy_loss = AverageMeter()
 
     source_cycle = itertools.cycle(source_loader)
@@ -78,6 +107,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     end = time.time()
     model.train()
     for i in range(args.train_iter):
+        global global_iter
+        global_iter = i
         adjust_learning_rate(optimizer, i, args)
         data_time.update(time.time() - end)
         source_input, label = source_cycle.next()
@@ -92,8 +123,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         label_var = torch.autograd.Variable(label)
 
         if args.model == 'jan':
-            source_output, source_feature, src_rec, _ = model(source_var)
-            target_output, target_feature, _, tar_rec = model(target_var)
+            source_output, source_feature, source_dc = model(source_var)
+            target_output, target_feature, target_dc = model(target_var)
         elif args.model == 'dan':
             source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
@@ -103,17 +134,14 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             loss = acc_loss + args.alpha * MMDLoss(source_output, target_output) +\
                    MMDLoss(source_feature, target_feature)
         if args.model == 'jan':
-            softmax = nn.Softmax()
-            loss = acc_loss + args.alpha * JMMDLoss(
-                [source_feature, softmax(source_output)],
-                [target_feature, softmax(target_output)]) +\
-                args.beta * (src_rec + tar_rec)
-            lrecons = src_rec + tar_rec
+            W_loss = Wasserstein_loss(source_dc, target_dc)
+            loss = acc_loss + args.alpha * W_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss_1.update(lrecons.data[0], args.batch_size)
+        loss1 = W_loss.data[0]
+        loss2 = 0
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step
@@ -128,11 +156,11 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         if i % args.print_freq == 0:
             print('Iter: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'Loss {src_rec.data[0]:.4f} {tar_rec.data[0]:.4f}\t'
+                  'Loss {loss1:.4f} {loss2:.4f}\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'Prec@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
                    i, args.train_iter, batch_time=batch_time,
-                      src_rec=src_rec, tar_rec=tar_rec, loss=losses, top1=top1))
+                      loss=losses, top1=top1, loss1=loss1, loss2=loss2))
 
         if i % args.test_iter == 0 and i != 0:
             validate(val_loader, model, criterion, args)
@@ -140,7 +168,6 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             batch_time.reset()
             data_time.reset()
             losses.reset()
-            loss_1.reset()
             top1.reset()
 
 
@@ -156,12 +183,14 @@ def validate(val_loader, model, criterion, args):
 
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
+        if i % 300:
+            continue
         target = target.cuda(async=True)
         input_var = torch.autograd.Variable(input, volatile=True)
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _, _, _ = model(input_var)
+        output, _, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

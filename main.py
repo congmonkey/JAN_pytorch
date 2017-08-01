@@ -46,7 +46,7 @@ parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
-parser.add_argument('--gamma', default=0.001, type=float, metavar='M',
+parser.add_argument('--gamma', default=0.002, type=float, metavar='M',
                     help='inv gamma')
 parser.add_argument('--power', default=0.75, type=float, metavar='M',
                     help='inv power')
@@ -93,7 +93,7 @@ def main():
             {'params': model.origin_feature.parameters(), 'lr': 1,},
             {'params': model.fcb.parameters(), 'lr': 10,},
             {'params': model.fc.parameters(), 'lr': 10},
-            {'params': model.C.parameters(), 'lr': args.gammaC}
+            {'params': model.dc7.parameters(), 'lr': 10},
         ]
 
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
@@ -105,6 +105,9 @@ def main():
     # Data loading code
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'validation')
+    
+    #traindir = '/home/dataset/office/domain_adaptation_images/amazon/images'
+    #valdir = '/home/dataset/office/domain_adaptation_images/webcam/images'
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 

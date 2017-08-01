@@ -78,3 +78,15 @@ def x_Cy(x, y, C, b):
     loss = torch.pow(x - F.linear(y, C, b), 2)
     loss = torch.mean(torch.sum(loss, 1))
     return loss
+
+def Wasserstein_loss(source, target):
+###     source = source.squeeze()
+###     target = target.squeeze()
+###     loss = torch.ger(source, source) + torch.ger(target, target) - 2*torch.ger(source, target)
+###     loss = -loss
+
+    source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda(), requires_grad=False)
+    target_l = torch.autograd.Variable(torch.ones(target.size()).cuda(), requires_grad=False)
+    loss = (F.binary_cross_entropy(source, source_l) + F.binary_cross_entropy(target, target_l)) / 2
+    loss = torch.mean(loss)
+    return loss
