@@ -87,6 +87,8 @@ def Wasserstein_loss(source, target):
 
     source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda(), requires_grad=False)
     target_l = torch.autograd.Variable(torch.ones(target.size()).cuda(), requires_grad=False)
-    loss = (F.binary_cross_entropy(source, source_l) + F.binary_cross_entropy(target, target_l)) / 2
+    output = torch.cat([source, target], 1)
+    label = torch.cat([source_l, target_l], 1)
+    loss = F.binary_cross_entropy(output, label)
     loss = torch.mean(loss)
     return loss

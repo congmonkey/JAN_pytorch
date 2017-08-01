@@ -69,15 +69,25 @@ class Net(nn.Module):
             self.fc = nn.Linear(args.bottleneck, args.classes)
 
             self.grl7 = GRLayer()
-            self.dc7 = nn.Sequential()
-            self.dc7.add_module('ip1', nn.Linear(args.bottleneck, args.bottleneck*4))
-            self.dc7.add_module('relu1', nn.ReLU())
-            self.dc7.add_module('drop1', nn.Dropout(0.5))
-            self.dc7.add_module('ip2', nn.Linear(args.bottleneck*4, args.bottleneck*4))
-            self.dc7.add_module('relu2', nn.ReLU())
-            self.dc7.add_module('drop2', nn.Dropout(0.5))
-            self.dc7.add_module('ip3', nn.Linear(args.bottleneck*4, 1))
-            self.dc7.add_module('sig', nn.Sigmoid())
+            dc_ip1 = nn.Linear(args.bottleneck, 1024)
+            dc_ip1.weight.data.normal_(0, 0.01)
+            dc_ip1.bias.data.fill_(0.0)
+            dc_ip2 = nn.Linear(1024, 1024)
+            dc_ip2.weight.data.normal_(0, 0.01)
+            dc_ip2.bias.data.fill_(0.0)
+            dc_ip3 = nn.Linear(1024, 1)
+            dc_ip3.weight.data.normal_(0, 0.3)
+            dc_ip3.bias.data.fill_(0.0)
+            self.dc7 = nn.Sequential(
+                dc_ip1,
+                nn.ReLU(),
+                nn.Dropout(0.5),
+                dc_ip2,
+                nn.ReLU(),
+                nn.Dropout(0.5),
+                dc_ip3,
+                nn.Sigmoid(),
+            )
             
             self.dc8 = nn.Sequential()
     def forward(self, x):
