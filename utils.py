@@ -90,7 +90,7 @@ class Net(nn.Module):
                 nn.ReLU(),
                 nn.Dropout(0.5),
                 dc_ip3,
-                nn.Sigmoid(),
+                nn.Tanh(),
             )
             
             self.dc8 = nn.Sequential()

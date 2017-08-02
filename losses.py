@@ -80,11 +80,18 @@ def x_Cy(x, y, C, b):
     return loss
 
 def Wasserstein_loss(source, target):
-    w = False
+    w = True
     if w:
+        def kernel(s, t, type='linear'):
+            if type == 'linear':
+                return torch.ger(s, t)
+            elif type == 'poly':
+                return torch.pow(torch.ger(s, t), 2)
+            elif type == 'gaussian':
+                pass
         source = source.squeeze()
         target = target.squeeze()
-        loss = torch.ger(source, source) + torch.ger(target, target) - 2*torch.ger(source, target)
+        loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
         loss = -loss
 
     else:
