@@ -103,3 +103,27 @@ def Wasserstein_loss(source, target):
         
     loss = torch.mean(loss)
     return loss
+
+
+def Joint_wasserstein_loss(source, target, source_fc8, target_fc8):
+    def kernel(s, t, type='poly'):
+        if type == 'linear':
+            return torch.ger(s, t)
+        elif type == 'poly':
+            return torch.pow(torch.ger(s, t), 2)
+        elif type == 'gaussian':
+            pass
+    source = source.squeeze()
+    target = target.squeeze()
+    source_fc8 = source_fc8.squeeze()
+    target_fc8 = target_fc8.squeeze()
+###     loss = kernel(source, source) * kernel(source_fc8, source_fc8) + \
+###            kernel(target, target) * kernel(target_fc8, target_fc8) - \
+###            2*kernel(source, target) * kernel(source_fc8, target_fc8)
+###     loss = (kernel(source, source) + kernel(target, target) - 2*kernel(source, target)) +\
+###            (kernel(source_fc8, source_fc8) + kernel(target_fc8, target_fc8) - 2*kernel(source_fc8, target_fc8))
+    loss = (kernel(source, source) + kernel(target, target) - 2*kernel(source, target))
+    loss = -loss
+        
+    loss = torch.mean(loss)
+    return loss

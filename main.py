@@ -94,6 +94,7 @@ def main():
             {'params': model.fcb.parameters(), 'lr': 10,},
             {'params': model.fc.parameters(), 'lr': 10},
             {'params': model.dc7.parameters(), 'lr': 10},
+            {'params': model.dc8.parameters(), 'lr': 10},
         ]
 
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,

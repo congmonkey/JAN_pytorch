@@ -73,28 +73,49 @@ class Net(nn.Module):
             self.fc.bias.data.fill_(0.1)
 
             self.grl7 = GRLayer()
-            dc_ip1 = nn.Linear(args.bottleneck, 1024)
-            dc_ip1.weight.data.normal_(0, 0.01)
-            dc_ip1.bias.data.fill_(0.0)
-            dc_ip2 = nn.Linear(1024, 1024)
-            dc_ip2.weight.data.normal_(0, 0.01)
-            dc_ip2.bias.data.fill_(0.0)
-            dc_ip3 = nn.Linear(1024, 1)
-            dc_ip3.weight.data.normal_(0, 0.3)
-            dc_ip3.bias.data.fill_(0.0)
+            dc7_ip1 = nn.Linear(args.bottleneck, 1024)
+            dc7_ip1.weight.data.normal_(0, 0.01)
+            dc7_ip1.bias.data.fill_(0.0)
+            dc7_ip2 = nn.Linear(1024, 1024)
+            dc7_ip2.weight.data.normal_(0, 0.01)
+            dc7_ip2.bias.data.fill_(0.0)
+            dc7_ip3 = nn.Linear(1024, 1)
+            dc7_ip3.weight.data.normal_(0, 0.3)
+            dc7_ip3.bias.data.fill_(0.0)
             self.dc7 = nn.Sequential(
-                dc_ip1,
+                dc7_ip1,
                 nn.ReLU(),
                 nn.Dropout(0.5),
-                dc_ip2,
+                dc7_ip2,
                 nn.ReLU(),
                 nn.Dropout(0.5),
-                dc_ip3,
-                nn.Tanh(),
+                dc7_ip3,
+                nn.Sigmoid(),
             )
             
-            self.dc8 = nn.Sequential()
-    def forward(self, x):
+            self.grl8 = GRLayer(high=0.0)
+            dc8_ip1 = nn.Linear(args.classes, 256)
+            dc8_ip1.weight.data.normal_(0, 0.01)
+            dc8_ip1.bias.data.fill_(0.0)
+            dc8_ip2 = nn.Linear(256, 256)
+            dc8_ip2.weight.data.normal_(0, 0.01)
+            dc8_ip2.bias.data.fill_(0.0)
+            dc8_ip3 = nn.Linear(256, 1)
+            dc8_ip3.weight.data.normal_(0, 0.3)
+            dc8_ip3.bias.data.fill_(0.0)
+            self.dc8 = nn.Sequential(
+                nn.Softmax(),
+                dc8_ip1,
+                nn.ReLU(),
+                nn.Dropout(0.5),
+                #dc8_ip2,
+                #nn.ReLU(),
+                #nn.Dropout(0.5),
+                dc8_ip3,
+                nn.Sigmoid(),
+            )
+            
+    def forward(self, x, label=None, criterion=None, test=True, source=False):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
@@ -103,9 +124,19 @@ class Net(nn.Module):
         if self.model == 'jan':
             x = self.fcb(x)
         y = self.fc(x)
+        loss = None
+        if test:
+            return y
+        if source:
+            loss = criterion(y, label)
         dc7 = self.grl7(x)
         dc7 = self.dc7(dc7)
-        return y, x, dc7
+        dc8 = self.grl8(y)
+        dc8 = self.dc8(dc8)
+        if not source:
+            return y, x, dc7, dc8
+        else:
+            return y, x, dc7, dc8, loss
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -137,18 +168,17 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         label_var = torch.autograd.Variable(label)
 
         if args.model == 'jan':
-            source_output, source_feature, source_dc = model(source_var)
-            target_output, target_feature, target_dc = model(target_var)
+            source_output, source_feature, source_dc, source_l, acc_loss = model(source_var, label=label_var, criterion=criterion, test=False, source=True)
+            target_output, target_feature, target_dc, target_l = model(target_var, test=False, source=False)
         elif args.model == 'dan':
             source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
 
-        acc_loss = criterion(source_output, label_var)
         if args.model == 'dan':
             loss = acc_loss + args.alpha * MMDLoss(source_output, target_output) +\
                    MMDLoss(source_feature, target_feature)
         if args.model == 'jan':
-            W_loss = Wasserstein_loss(source_dc, target_dc)
+            W_loss = Joint_wasserstein_loss(source_dc, target_dc, source_l, target_l)
             loss = acc_loss + args.alpha * W_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
@@ -202,7 +232,7 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _, _ = model(input_var)
+        output = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
