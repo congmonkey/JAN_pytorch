@@ -70,7 +70,7 @@ class Net(nn.Module):
             self.fcb.bias.data.fill_(0.1)
             self.fc = nn.Linear(args.bottleneck, args.classes)
             self.fc.weight.data.normal_(0, 0.01)
-            self.fc.bias.data.fill_(0.1)
+            self.fc.bias.data.fill_(0.0)
 
             self.grl7 = GRLayer()
             dc_ip1 = nn.Linear(args.bottleneck, 1024)
@@ -80,7 +80,7 @@ class Net(nn.Module):
             dc_ip2.weight.data.normal_(0, 0.01)
             dc_ip2.bias.data.fill_(0.0)
             dc_ip3 = nn.Linear(1024, 1)
-            dc_ip3.weight.data.normal_(0, 0.3)
+            dc_ip3.weight.data.normal_(0, 0.03)
             dc_ip3.bias.data.fill_(0.0)
             self.dc7 = nn.Sequential(
                 dc_ip1,
@@ -90,11 +90,10 @@ class Net(nn.Module):
                 nn.ReLU(),
                 nn.Dropout(0.5),
                 dc_ip3,
-                nn.Tanh(),
+                nn.Sigmoid(),
             )
             
-            self.dc8 = nn.Sequential()
-    def forward(self, x):
+    def forward(self, x, train_dc=False):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
@@ -103,9 +102,15 @@ class Net(nn.Module):
         if self.model == 'jan':
             x = self.fcb(x)
         y = self.fc(x)
-        dc7 = self.grl7(x)
-        dc7 = self.dc7(dc7)
-        return y, x, dc7
+        if self.model == 'dan':
+            return y, x
+        if self.model == 'jan':
+            if train_dc:
+                dc7 = x.detach()
+            else:
+                dc7 = self.grl7(x)
+            dc7 = self.dc7(dc7)
+            return y, x, dc7
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -136,25 +141,53 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         target_var = torch.autograd.Variable(target_input)
         label_var = torch.autograd.Variable(label)
 
+###         if args.model == 'jan':
+###             for _ in range(0):
+###                 source_output, source_feature, source_dc = model(source_var, train_dc=True)
+###                 target_output, target_feature, target_dc = model(target_var, train_dc=True)
+###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
+###                 optimizer.zero_grad()
+###                 loss.backward()
+###                 optimizer.step()
+###             for _ in range(0):
+###                 source_output, source_feature, source_dc = model(source_var)
+###                 target_output, target_feature, target_dc = model(target_var)
+###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
+###                 optimizer.zero_grad()
+###                 loss.backward()
+###                 for p in optimizer.param_groups[-1]['params']:
+###                     p.grad.data.zero_()
+###                 optimizer.step()
+
+        
         if args.model == 'jan':
-            source_output, source_feature, source_dc = model(source_var)
-            target_output, target_feature, target_dc = model(target_var)
+            inputs = torch.cat([source_var, target_var], 0)
+            outputs, features, dcs = model(inputs)
+            #source_output, source_feature, source_dc = model(source_var)
+            #target_output, target_feature, target_dc = model(target_var)
+            source_output, target_output = outputs.chunk(2, 0)
+            sourde_feature, target_feature = features.chunk(2, 0)
+            source_dc, target_dc = dcs.chunk(2, 0)
         elif args.model == 'dan':
             source_output, source_feature = model(source_var)
             target_output, target_feature = model(target_var)
 
         acc_loss = criterion(source_output, label_var)
         if args.model == 'dan':
-            loss = acc_loss + args.alpha * MMDLoss(source_output, target_output) +\
+            loss = acc_loss + args.alpha * \
                    MMDLoss(source_feature, target_feature)
+                   ###MMDLoss(source_output, target_output)+
         if args.model == 'jan':
             W_loss = Wasserstein_loss(source_dc, target_dc)
+            ### softmax = nn.Softmax()
+            ### W_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
+            
             loss = acc_loss + args.alpha * W_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0]
+        loss1 = W_loss.data[0] if args.model == 'jan' else 0
         loss2 = 0
         top1.update(prec1[0], args.batch_size)
 
@@ -163,6 +196,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         loss.backward()
         optimizer.step()
 
+        
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -202,7 +236,10 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _, _ = model(input_var)
+        if args.model == 'dan':
+            output, _ = model(input_var)
+        elif args.model == 'jan':
+            output, _, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

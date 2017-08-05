@@ -79,27 +79,48 @@ def x_Cy(x, y, C, b):
     loss = torch.mean(torch.sum(loss, 1))
     return loss
 
-def Wasserstein_loss(source, target):
-    w = True
+class RevLayer(torch.autograd.Function):
+    def forward(self, input):
+        return input    
+    def backward(self, gradOutput):
+        return -0.1*gradOutput
+
+
+def Wasserstein_loss(source, target, source_l=None, target_l=None, kernel_type='gaussian'):
+    w = False
     if w:
-        def kernel(s, t, type='linear'):
+        def kernel(s, t, type=kernel_type):
             if type == 'linear':
-                return torch.ger(s, t)
+                s_ = s.unsqueeze(1).repeat(1, t.size()[0], 1)
+                t_ = t.unsqueeze(0).repeat(s.size()[0], 1, 1)
+                return torch.sum(torch.mul(s_, t_), 2).squeeze()
             elif type == 'poly':
                 return torch.pow(torch.ger(s, t), 2)
             elif type == 'gaussian':
-                pass
-        source = source.squeeze()
-        target = target.squeeze()
-        loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
+                ip = torch.ger(s.squeeze(), t.squeeze())
+                euclidean = torch.pow(s, 2).expand_as(ip) +\
+                            torch.pow(t, 2).expand_as(ip).t() -\
+                            2 * ip
+                return (torch.exp(-euclidean / .01) + torch.exp(-euclidean / .02) + torch.exp(-euclidean / .04))/3.
+        if source_l and target_l:
+            ### loss = kernel(source, source) * kernel(source_l, source_l, 'linear') +\
+            ###        kernel(target, target) * kernel(target_l, target_l, 'linear') -\
+            ###        2 * kernel(source, target) * kernel(target_l, target_l, 'linear')
+            softmax = nn.Softmax()
+            rev = RevLayer()
+            loss = JMMDLoss([source, softmax(rev(source_l))], [target, softmax(rev(target_l))])
+        else:
+            ### loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
+            loss = MMDLoss(source, target)
         loss = -loss
 
     else:
-        source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda(), requires_grad=False)
-        target_l = torch.autograd.Variable(torch.ones(target.size()).cuda(), requires_grad=False)
-        output = torch.cat([source, target], 1)
-        label = torch.cat([source_l, target_l], 1)
-        loss = F.binary_cross_entropy(output, label)
+        source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda())
+        target_l = torch.autograd.Variable(torch.ones(target.size()).cuda())
+        output = torch.cat([source, target], 0)
+        label = torch.cat([source_l, target_l], 0)
+        import numpy as np
+        loss = nn.BCELoss()(output, torch.autograd.Variable(torch.from_numpy(np.array([1] * 32 + [0] * 32)).float().cuda()))
         
     loss = torch.mean(loss)
     return loss
