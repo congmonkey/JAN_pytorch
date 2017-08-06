@@ -84,7 +84,7 @@ class RevLayer(torch.autograd.Function):
     def forward(self, input):
         return input    
     def backward(self, gradOutput):
-        return -0.1*gradOutput
+        return -1.*gradOutput
 
 
 def Wasserstein_loss(source, target, source_l=None, target_l=None, kernel_type='gaussian'):
@@ -102,12 +102,12 @@ def Wasserstein_loss(source, target, source_l=None, target_l=None, kernel_type='
                         2 * ip
             return (torch.exp(-euclidean / .01) + torch.exp(-euclidean / .02) + torch.exp(-euclidean / .04))/3.
     if source_l and target_l:
-        loss = kernel(source, source) * kernel(source_l, source_l, 'linear') +\
-               kernel(target, target) * kernel(target_l, target_l, 'linear') -\
-               2 * kernel(source, target) * kernel(target_l, target_l, 'linear')
+        # loss = kernel(source, source) * kernel(source_l, source_l, 'linear') +\
+        #        kernel(target, target) * kernel(target_l, target_l, 'linear') -\
+        #        2 * kernel(source, target) * kernel(target_l, target_l, 'linear')
         # softmax = nn.Softmax()
-        # rev = RevLayer()
-        # loss = JMMDLoss([source, softmax(rev(source_l))], [target, softmax(rev(target_l))])
+        rev = RevLayer()
+        loss = JMMDLoss([source, rev(source_l)], [target, rev(target_l)])
     else:
         ### loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
         loss = MMDLoss(source, target)

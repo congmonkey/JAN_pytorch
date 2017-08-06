@@ -20,8 +20,6 @@ import math
 from losses import *
 from utils import *
 
-global_iter = 0
-
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
@@ -111,7 +109,6 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     end = time.time()
     model.train()
     for i in range(args.train_iter):
-        global global_iter
         global_iter = i
         adjust_learning_rate(optimizer, i, args)
         data_time.update(time.time() - end)
@@ -154,9 +151,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
      
         acc_loss = criterion(source_output, label_var)
 
-        W_loss = Domain_loss(source_dc, target_dc)
-        ### softmax = nn.Softmax()
-        ### W_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
+        softmax = nn.Softmax()
+        W_loss = Wasserstein_loss(source_dc, target_dc, softmax(source_output), softmax(target_output))
             
         loss = acc_loss + args.alpha * W_loss
 

@@ -122,25 +122,6 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         source_var = torch.autograd.Variable(source_input)
         target_var = torch.autograd.Variable(target_input)
         label_var = torch.autograd.Variable(label)
-
-###         if args.model == 'jan':
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var, train_dc=True)
-###                 target_output, target_feature, target_dc = model(target_var, train_dc=True)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 optimizer.step()
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var)
-###                 target_output, target_feature, target_dc = model(target_var)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 for p in optimizer.param_groups[-1]['params']:
-###                     p.grad.data.zero_()
-###                 optimizer.step()
-
         
         inputs = torch.cat([source_var, target_var], 0)
         outputs, features, dcs = model(inputs)
@@ -150,12 +131,9 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         source_dc, target_dc = dcs.chunk(2, 0)
      
         acc_loss = criterion(source_output, label_var)
-
-        W_loss = Domain_loss(source_dc, target_dc)
-        ### softmax = nn.Softmax()
-        ### W_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
+        dc_loss = Domain_loss(source_dc, target_dc)
             
-        loss = acc_loss + args.alpha * W_loss
+        loss = acc_loss + args.alpha * dc_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
