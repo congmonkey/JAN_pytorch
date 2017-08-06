@@ -141,8 +141,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0]
-        loss2 = 0
+        loss1 = dc_loss.data[0]
+        loss2 = acc_loss.data[0]
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step
