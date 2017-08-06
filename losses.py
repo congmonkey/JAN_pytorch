@@ -3,6 +3,7 @@ import os
 import shutil
 import time
 import itertools
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -123,4 +124,13 @@ def Wasserstein_loss(source, target, source_l=None, target_l=None, kernel_type='
         loss = nn.BCELoss()(output, torch.autograd.Variable(torch.from_numpy(np.array([1] * 32 + [0] * 32)).float().cuda()))
         
     loss = torch.mean(loss)
+    return loss
+
+def Domain_loss(source, target, source_l=None, target_l=None):
+    source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda())
+    target_l = torch.autograd.Variable(torch.ones(target.size()).cuda())
+    output = torch.cat([source, target], 0)
+    label = torch.cat([source_l, target_l], 0)
+
+    loss = nn.BCELoss()(output, torch.autograd.Variable(torch.from_numpy(np.array([1] * 32 + [0] * 32)).float().cuda()))
     return loss

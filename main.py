@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import time
+import importlib
 
 import torch
 import torch.nn as nn
@@ -28,14 +29,14 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                     help='model architecture: ' +
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
-parser.add_argument('--model', '-m', metavar='MODEL', default='jan',
-                    choices=['dan', 'jan'])
+parser.add_argument('--model', '-m', metavar='MODEL', default='DAN',
+                    choices=['DAN', 'JAN', 'GRL'])
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('-c', '--classes', default=12, type=int, metavar='N',
+parser.add_argument('-c', '--classes', default=None, type=int, metavar='N',
                     help='number of classes (default: 12)')
-parser.add_argument('-bc', '--bottleneck', default=128, type=int, metavar='N',
-                    help='width of bottleneck (default: 128)')
+parser.add_argument('-bc', '--bottleneck', default=256, type=int, metavar='N',
+                    help='width of bottleneck (default: 256)')
 parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--gpu', default='0', type=str, metavar='N',
@@ -46,7 +47,7 @@ parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
-parser.add_argument('--gamma', default=0.002, type=float, metavar='M',
+parser.add_argument('--gamma', default=0.001, type=float, metavar='M',
                     help='inv gamma')
 parser.add_argument('--power', default=0.75, type=float, metavar='M',
                     help='inv power')
@@ -75,8 +76,10 @@ def main():
     args = parser.parse_args()
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
+    method = importlib.import_module('models.' + args.model)
+
     # create model
-    model = Net(args).cuda()
+    model = method.Net(args).cuda()
     ### print(model)
     print(args)
 
