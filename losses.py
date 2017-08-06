@@ -88,41 +88,31 @@ class RevLayer(torch.autograd.Function):
 
 
 def Wasserstein_loss(source, target, source_l=None, target_l=None, kernel_type='gaussian'):
-    w = False
-    if w:
-        def kernel(s, t, type=kernel_type):
-            if type == 'linear':
-                s_ = s.unsqueeze(1).repeat(1, t.size()[0], 1)
-                t_ = t.unsqueeze(0).repeat(s.size()[0], 1, 1)
-                return torch.sum(torch.mul(s_, t_), 2).squeeze()
-            elif type == 'poly':
-                return torch.pow(torch.ger(s, t), 2)
-            elif type == 'gaussian':
-                ip = torch.ger(s.squeeze(), t.squeeze())
-                euclidean = torch.pow(s, 2).expand_as(ip) +\
-                            torch.pow(t, 2).expand_as(ip).t() -\
-                            2 * ip
-                return (torch.exp(-euclidean / .01) + torch.exp(-euclidean / .02) + torch.exp(-euclidean / .04))/3.
-        if source_l and target_l:
-            ### loss = kernel(source, source) * kernel(source_l, source_l, 'linear') +\
-            ###        kernel(target, target) * kernel(target_l, target_l, 'linear') -\
-            ###        2 * kernel(source, target) * kernel(target_l, target_l, 'linear')
-            softmax = nn.Softmax()
-            rev = RevLayer()
-            loss = JMMDLoss([source, softmax(rev(source_l))], [target, softmax(rev(target_l))])
-        else:
-            ### loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
-            loss = MMDLoss(source, target)
-        loss = -loss
-
+    def kernel(s, t, type=kernel_type):
+        if type == 'linear':
+            s_ = s.unsqueeze(1).repeat(1, t.size()[0], 1)
+            t_ = t.unsqueeze(0).repeat(s.size()[0], 1, 1)
+            return torch.sum(torch.mul(s_, t_), 2).squeeze()
+        elif type == 'poly':
+            return torch.pow(torch.ger(s, t), 2)
+        elif type == 'gaussian':
+            ip = torch.ger(s.squeeze(), t.squeeze())
+            euclidean = torch.pow(s, 2).expand_as(ip) +\
+                        torch.pow(t, 2).expand_as(ip).t() -\
+                        2 * ip
+            return (torch.exp(-euclidean / .01) + torch.exp(-euclidean / .02) + torch.exp(-euclidean / .04))/3.
+    if source_l and target_l:
+        loss = kernel(source, source) * kernel(source_l, source_l, 'linear') +\
+               kernel(target, target) * kernel(target_l, target_l, 'linear') -\
+               2 * kernel(source, target) * kernel(target_l, target_l, 'linear')
+        # softmax = nn.Softmax()
+        # rev = RevLayer()
+        # loss = JMMDLoss([source, softmax(rev(source_l))], [target, softmax(rev(target_l))])
     else:
-        source_l = torch.autograd.Variable(torch.zeros(source.size()).cuda())
-        target_l = torch.autograd.Variable(torch.ones(target.size()).cuda())
-        output = torch.cat([source, target], 0)
-        label = torch.cat([source_l, target_l], 0)
-        import numpy as np
-        loss = nn.BCELoss()(output, torch.autograd.Variable(torch.from_numpy(np.array([1] * 32 + [0] * 32)).float().cuda()))
-        
+        ### loss = kernel(source, source) + kernel(target, target) - 2*kernel(source, target)
+        loss = MMDLoss(source, target)
+    loss = -loss
+
     loss = torch.mean(loss)
     return loss
 

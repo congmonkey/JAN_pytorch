@@ -22,23 +22,6 @@ from utils import *
 
 global_iter = 0
 
-class GRLayer(torch.autograd.Function):
-    def __init__(self, max_iter=10000, alpha=10., high=1.):
-        super(GRLayer, self).__init__()
-        self.total = float(max_iter)
-        self.alpha = alpha
-        self.high = high
-        
-    def forward(self, input):
-        return input
-    
-    def backward(self, gradOutput):
-        global global_iter
-        prog = global_iter/self.total
-        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
-        return (-lr) * gradOutput
-
-
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
