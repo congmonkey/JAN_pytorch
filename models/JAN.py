@@ -20,25 +20,6 @@ import math
 from losses import *
 from utils import *
 
-global_iter = 0
-
-class GRLayer(torch.autograd.Function):
-    def __init__(self, max_iter=10000, alpha=10., high=1.):
-        super(GRLayer, self).__init__()
-        self.total = float(max_iter)
-        self.alpha = alpha
-        self.high = high
-        
-    def forward(self, input):
-        return input
-    
-    def backward(self, gradOutput):
-        global global_iter
-        prog = global_iter/self.total
-        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
-        return (-lr) * gradOutput
-
-
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
@@ -63,55 +44,29 @@ class Net(nn.Module):
         self.origin_feature = torch.nn.DataParallel(model)
         self.model = args.model
         self.arch = args.arch
-        if args.model == 'dan':
-            self.fc = nn.Linear(self.feature_dim, args.classes)
-        elif args.model == 'jan':
-            self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
-            self.fcb.weight.data.normal_(0, 0.005)
-            self.fcb.bias.data.fill_(0.1)
-            self.fc = nn.Linear(args.bottleneck, args.classes)
-            self.fc.weight.data.normal_(0, 0.01)
-            self.fc.bias.data.fill_(0.0)
 
-            self.grl7 = GRLayer()
-            dc_ip1 = nn.Linear(args.bottleneck, 1024)
-            dc_ip1.weight.data.normal_(0, 0.01)
-            dc_ip1.bias.data.fill_(0.0)
-            dc_ip2 = nn.Linear(1024, 1024)
-            dc_ip2.weight.data.normal_(0, 0.01)
-            dc_ip2.bias.data.fill_(0.0)
-            dc_ip3 = nn.Linear(1024, 1)
-            dc_ip3.weight.data.normal_(0, 0.03)
-            dc_ip3.bias.data.fill_(0.0)
-            self.dc7 = nn.Sequential(
-                dc_ip1,
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                dc_ip2,
-                nn.ReLU(),
-                nn.Dropout(0.5),
-                dc_ip3,
-                nn.Sigmoid(),
-            )
+        self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
+        self.fcb.weight.data.normal_(0, 0.005)
+        self.fcb.bias.data.fill_(0.1)
+        self.fc = nn.Linear(args.bottleneck, args.classes)
+        self.fc.weight.data.normal_(0, 0.01)
+        self.fc.bias.data.fill_(0.0)
+
+        args.SGD_param = [
+            {'params': self.origin_feature.parameters(), 'lr': 1,},
+            {'params': self.fcb.parameters(), 'lr': 10},
+            {'params': self.fc.parameters(), 'lr': 10}
+        ]
             
-    def forward(self, x, train_dc=False):
+    def forward(self, x):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
         x = x.view(x.size(0), -1)
-        if self.model == 'jan':
-            x = self.fcb(x)
+        x = self.fcb(x)
         y = self.fc(x)
-        if self.model == 'dan':
-            return y, x
-        if self.model == 'jan':
-            if train_dc:
-                dc7 = x.detach()
-            else:
-                dc7 = self.grl7(x)
-            dc7 = self.dc7(dc7)
-            return y, x, dc7
+        return y, x
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -141,55 +96,23 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         source_var = torch.autograd.Variable(source_input)
         target_var = torch.autograd.Variable(target_input)
         label_var = torch.autograd.Variable(label)
-
-###         if args.model == 'jan':
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var, train_dc=True)
-###                 target_output, target_feature, target_dc = model(target_var, train_dc=True)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 optimizer.step()
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var)
-###                 target_output, target_feature, target_dc = model(target_var)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 for p in optimizer.param_groups[-1]['params']:
-###                     p.grad.data.zero_()
-###                 optimizer.step()
-
         
-        if args.model == 'jan':
-            inputs = torch.cat([source_var, target_var], 0)
-            outputs, features, dcs = model(inputs)
-            #source_output, source_feature, source_dc = model(source_var)
-            #target_output, target_feature, target_dc = model(target_var)
-            source_output, target_output = outputs.chunk(2, 0)
-            sourde_feature, target_feature = features.chunk(2, 0)
-            source_dc, target_dc = dcs.chunk(2, 0)
-        elif args.model == 'dan':
-            source_output, source_feature = model(source_var)
-            target_output, target_feature = model(target_var)
-
-        acc_loss = criterion(source_output, label_var)
-        if args.model == 'dan':
-            loss = acc_loss + args.alpha * \
-                   MMDLoss(source_feature, target_feature)
-                   ###MMDLoss(source_output, target_output)+
-        if args.model == 'jan':
-            W_loss = Wasserstein_loss(source_dc, target_dc)
-            ### softmax = nn.Softmax()
-            ### W_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
-            
-            loss = acc_loss + args.alpha * W_loss
+        inputs = torch.cat([source_var, target_var], 0)
+        outputs, features, dcs = model(inputs)
+        source_output, target_output = outputs.chunk(2, 0)
+        sourde_feature, target_feature = features.chunk(2, 0)
+        source_dc, target_dc = dcs.chunk(2, 0)
+        
+        softmax = nn.Softmax()
+        jmmd_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
+        
+        loss = acc_loss + args.alpha * jmmd_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0] if args.model == 'jan' else 0
-        loss2 = 0
+        loss1 = jmmd_loss.data[0]
+        loss2 = acc_loss.data[0]
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step
@@ -237,10 +160,7 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        if args.model == 'dan':
-            output, _ = model(input_var)
-        elif args.model == 'jan':
-            output, _, _ = model(input_var)
+        output, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss

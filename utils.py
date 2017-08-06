@@ -17,8 +17,6 @@ import torchvision.models as models
 
 import math
 
-global_iter = 0
-
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
