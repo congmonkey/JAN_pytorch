@@ -20,8 +20,6 @@ import math
 from losses import *
 from utils import *
 
-global_iter = 0
-
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
@@ -111,7 +109,6 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     end = time.time()
     model.train()
     for i in range(args.train_iter):
-        global global_iter
         global_iter = i
         adjust_learning_rate(optimizer, i, args)
         data_time.update(time.time() - end)
