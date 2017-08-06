@@ -93,10 +93,10 @@ class Net(nn.Module):
         )
         
         args.SGD_param = [
-            {'params': model.origin_feature.parameters(), 'lr': 1,},
-            {'params': model.fcb.parameters(), 'lr': 10,},
-            {'params': model.fc.parameters(), 'lr': 10},
-            {'params': model.dc7.parameters(), 'lr': 10},
+            {'params': self.origin_feature.parameters(), 'lr': 1,},
+            {'params': self.fcb.parameters(), 'lr': 10,},
+            {'params': self.fc.parameters(), 'lr': 10},
+            {'params': self.dc7.parameters(), 'lr': 10},
         ]
             
     def forward(self, x, train_dc=False):
@@ -180,7 +180,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0] if args.model == 'jan' else 0
+        loss1 = W_loss.data[0]
         loss2 = 0
         top1.update(prec1[0], args.batch_size)
 

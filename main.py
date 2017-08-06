@@ -86,19 +86,6 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    if args.model == 'dan':
-        args.SGD_param = [
-            {'params': model.origin_feature.parameters(), 'lr': 1,},
-            {'params': model.fc.parameters(), 'lr': 10}
-        ]
-    elif args.model == 'jan':
-        args.SGD_param = [
-            {'params': model.origin_feature.parameters(), 'lr': 1,},
-            {'params': model.fcb.parameters(), 'lr': 10,},
-            {'params': model.fc.parameters(), 'lr': 10},
-            {'params': model.dc7.parameters(), 'lr': 10},
-        ]
-
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay)
@@ -146,8 +133,8 @@ def main():
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    train_val(source_loader, target_loader, val_loader, 
-        model, criterion, optimizer, args)
+    method.train_val(source_loader, target_loader, val_loader, 
+                     model, criterion, optimizer, args)
 
 
 if __name__ == '__main__':
