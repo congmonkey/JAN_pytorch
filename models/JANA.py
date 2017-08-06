@@ -20,6 +20,8 @@ import math
 from losses import *
 from utils import *
 
+global_iter = 0
+
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
@@ -109,6 +111,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     end = time.time()
     model.train()
     for i in range(args.train_iter):
+        global global_iter
         global_iter = i
         adjust_learning_rate(optimizer, i, args)
         data_time.update(time.time() - end)
@@ -225,3 +228,19 @@ def validate(val_loader, model, criterion, args):
           .format(top1=top1, top5=top5))
 
     return top1.avg
+
+class GRLayer(torch.autograd.Function):
+    def __init__(self, max_iter=10000, alpha=10., high=1.):
+        super(GRLayer, self).__init__()
+        self.total = float(max_iter)
+        self.alpha = alpha
+        self.high = high
+        
+    def forward(self, input):
+        return input
+    
+    def backward(self, gradOutput):
+        global global_iter
+        prog = global_iter/self.total
+        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
+        return (-lr) * gradOutput

@@ -36,22 +36,6 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-class GRLayer(torch.autograd.Function):
-    def __init__(self, max_iter=10000, alpha=10., high=1.):
-        super(GRLayer, self).__init__()
-        self.total = float(max_iter)
-        self.alpha = alpha
-        self.high = high
-        
-    def forward(self, input):
-        return input
-    
-    def backward(self, gradOutput):
-        global global_iter
-        prog = global_iter/self.total
-        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
-        return (-lr) * gradOutput
-
 
 def save_checkpoint(state, is_best):
     if is_best:
