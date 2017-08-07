@@ -98,13 +98,13 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         label_var = torch.autograd.Variable(label)
         
         inputs = torch.cat([source_var, target_var], 0)
-        outputs, features, dcs = model(inputs)
+        outputs, features = model(inputs)
         source_output, target_output = outputs.chunk(2, 0)
-        sourde_feature, target_feature = features.chunk(2, 0)
-        source_dc, target_dc = dcs.chunk(2, 0)
-        
+        source_feature, target_feature = features.chunk(2, 0)
+
+        acc_loss = criterion(source_output, label_var)
         softmax = nn.Softmax()
-        jmmd_loss = JMMDLoss([source_feature, softmax(source_output).detach()], [target_feature, softmax(target_output).detach()])
+        jmmd_loss = JMMDLoss([source_feature, softmax(source_output)], [target_feature, softmax(target_output)])
         
         loss = acc_loss + args.alpha * jmmd_loss
 
