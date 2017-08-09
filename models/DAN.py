@@ -113,16 +113,16 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         target_output, target_feature = model(target_var)
 
         acc_loss = criterion(source_output, label_var)
-        if args.model == 'dan':
-            loss = acc_loss + args.alpha * \
-                   MMDLoss(source_feature, target_feature)
-                   ###MMDLoss(source_output, target_output)+
+        mmd_loss = MMDLoss(source_feature, target_feature)
+        loss = acc_loss + args.alpha * \
+               mmd_loss
+        ###MMDLoss(source_output, target_output)+
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0] if args.model == 'jan' else 0
-        loss2 = 0
+        loss1 = mmd_loss.data[0]
+        loss2 = acc_loss.data[0]
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step

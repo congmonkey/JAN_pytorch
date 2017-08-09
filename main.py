@@ -67,6 +67,8 @@ parser.add_argument('--test-iter', default=1000, type=int,
                     metavar='N', help='')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
+parser.add_argument('--fromcaffe', dest='fromcaffe', action='store_true',
+                    help='use caffe pre-trained model')
 
 best_prec1 = 0
 
@@ -88,7 +90,8 @@ def main():
 
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
                                 momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+                                weight_decay=args.weight_decay,
+                                nesterov=True)
 
     cudnn.benchmark = True
 

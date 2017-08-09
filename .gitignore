@@ -101,3 +101,5 @@ ENV/
 src/*
 
 .DS_Store
+
+models/resnet50.pth

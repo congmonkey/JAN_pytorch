@@ -25,7 +25,13 @@ class Net(nn.Module):
     def __init__(self, args):
         super(Net, self).__init__()
         # create model
-        if args.pretrained:
+        if args.fromcaffe:
+            print("=> using pre-trained model from caffe '{}'".format(args.arch))
+            import models.caffe_resnet as resnet
+            model = resnet.__dict__[args.arch]()
+            state_dict = torch.load("models/"+args.arch+".pth")
+            model.load_state_dict(state_dict)
+        elif args.pretrained:
             print("=> using pre-trained model '{}'".format(args.arch))
             model = models.__dict__[args.arch](pretrained=True)
         else:
