@@ -133,23 +133,24 @@ def main():
         datasets.ImageFolder(traindir, transforms.Compose([
             MyScale((224, 224)),
             transforms.CenterCrop(224),
-            transforms.RandomSizedCrop(224),
-            transforms.RandomHorizontalFlip(),
+            #transforms.RandomSizedCrop(224),
+            #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=True,
+        batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     target_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
             MyScale((224,244)),
-            transforms.RandomSizedCrop(224),
-            transforms.RandomHorizontalFlip(),
+            transforms.CenterCrop(224),
+            #transforms.RandomSizedCrop(224),
+            #transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=True,
+        batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
