@@ -52,14 +52,14 @@ class Net(nn.Module):
         self.arch = args.arch
 
         self.fcb = nn.Linear(self.feature_dim, args.bottleneck)
-        self.fcb.weight.data.normal_(0, 0.005)
+        self.fcb.weight.data.fill_(0.01)#normal_(0, 0.005)
         self.fcb.bias.data.fill_(0.1)
         self.fc = nn.Linear(args.bottleneck, args.classes)
-        self.fc.weight.data.normal_(0, 0.01)
+        self.fc.weight.data.fill_(0.01)#normal_(0, 0.01)
         self.fc.bias.data.fill_(0.0)
 
         args.SGD_param = [
-            {'params': self.origin_feature.parameters(), 'lr': 1,},
+            {:'params': self.origin_feature.parameters(), 'lr': 1},
             {'params': self.fcb.parameters(), 'lr': 10},
             {'params': self.fc.parameters(), 'lr': 10}
         ]
@@ -69,7 +69,7 @@ class Net(nn.Module):
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
-        x = x.view(x.size(0), -1)
+        x = x.view(x.size(0), -1).detach()
         x = self.fcb(x)
         y = self.fc(x)
         return y, x
@@ -110,14 +110,14 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
 
         acc_loss = criterion(source_output, label_var)
         softmax = nn.Softmax()
-        jmmd_loss = JMMDLoss([source_feature, softmax(source_output)], [target_feature, softmax(target_output)])
+        #jmmd_loss = JMMDLoss([source_feature, softmax(source_output)], [target_feature, softmax(target_output)])
         
-        loss = acc_loss + args.alpha * jmmd_loss
+        loss = acc_loss# + args.alpha * jmmd_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = jmmd_loss.data[0]
+        loss1 = 0#jmmd_loss.data[0]
         loss2 = acc_loss.data[0]
         top1.update(prec1[0], args.batch_size)
 
@@ -132,6 +132,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         end = time.time()
 
         if i % args.print_freq == 0:
+            import pdb
+            #pdb.set_trace()
             print('Iter: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss1:.4f} {loss2:.4f}\t'

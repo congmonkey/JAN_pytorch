@@ -91,7 +91,7 @@ def main():
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay,
-                                nesterov=True)
+                                nesterov=False)
 
     cudnn.benchmark = True
 
@@ -107,6 +107,7 @@ def main():
     source_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(traindir, transforms.Compose([
             transforms.Scale(256),
+            #transforms.CenterCrop(224),
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -118,6 +119,7 @@ def main():
     target_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
             transforms.Scale(256),
+            #transforms.CenterCrop(224),
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -128,7 +130,7 @@ def main():
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Scale(256),
+            transforms.Scale(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
