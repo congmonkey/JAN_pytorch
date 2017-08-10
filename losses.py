@@ -18,10 +18,7 @@ import torchvision.models as models
 def guassian_kernel(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
     n_samples = int(source.size()[0])+int(target.size()[0])
     total = torch.cat([source, target])
-    k1 = torch.sum(torch.pow(total, 2), 1).repeat(1,n_samples)
-    k2 = torch.sum(torch.pow(total, 2), 1).resize(1, n_samples).repeat(n_samples, 1)
-    k3 = torch.mm(total, torch.t(total))
-    L2_distance = k1 + k2 - 2*k3
+    L2_distance = ((total.unsqueeze(1)-total.unsqueeze(0))**2).sum(2)
     if fix_sigma:
         bandwidth = fix_sigma
     else:
@@ -53,7 +50,7 @@ def JMMDLoss(source_list, target_list, kernel_mul=2.0, kernel_num=5, fix_sigma_l
         fix_sigma = fix_sigma_list[i]
         kernels = guassian_kernel(source, target,
             kernel_mul=kernel_mul, kernel_num=kernel_num, fix_sigma=fix_sigma)
-        if joint_kernels:
+        if joint_kernels is not None:
             joint_kernels = joint_kernels * kernels
         else:
             joint_kernels = kernels

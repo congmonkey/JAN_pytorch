@@ -12,6 +12,7 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
+from PIL import Image, ImageOps
 
 from utils import *
 
@@ -104,9 +105,30 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
+    class MyScale(object):
+        def __init__(self, size, interpolation=Image.BILINEAR):
+            self.size = size
+            self.interpolation = interpolation
+            
+        def __call__(self, img):
+            if isinstance(self.size, int):
+                w, h = img.size
+                if (w <= h and w == self.size) or (h <= w and h == self.size):
+                    return img
+                if w < h:
+                    ow = self.size
+                    oh = int(self.size * h / w)
+                    return img.resize((ow, oh), self.interpolation)
+                else:
+                    oh = self.size
+                    ow = int(self.size * w / h)
+                    return img.resize((ow, oh), self.interpolation)
+            else:
+                return img.resize(self.size, self.interpolation)
+
     source_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(traindir, transforms.Compose([
-            transforms.Scale(256),
+            MyScale((224, 224)),
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -117,7 +139,7 @@ def main():
 
     target_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Scale(256),
+            MyScale((224,244)),
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -128,7 +150,7 @@ def main():
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            transforms.Scale(256),
+            MyScale((224, 224)),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
