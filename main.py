@@ -13,6 +13,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 from PIL import Image, ImageOps
+import numpy as np
 
 from utils import *
 
@@ -124,11 +125,14 @@ def main():
                     ow = int(self.size * w / h)
                     return img.resize((ow, oh), self.interpolation)
             else:
+                #b, g, r = img.split()
+                #img = Image.merge("RGB", (r, b, g))
                 return img.resize(self.size, self.interpolation)
 
     source_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(traindir, transforms.Compose([
             MyScale((224, 224)),
+            transforms.CenterCrop(224),
             transforms.RandomSizedCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
