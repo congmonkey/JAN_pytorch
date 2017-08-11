@@ -100,17 +100,17 @@ def main():
     # Data loading code
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'validation')
-    
+
     traindir = '/home/dataset/office/domain_adaptation_images/amazon/images'
     valdir = '/home/dataset/office/domain_adaptation_images/webcam/images'
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat') / 255,
                                      std=[0.229, 0.224, 0.225])
 
     class MyScale(object):
         def __init__(self, size, interpolation=Image.BILINEAR):
             self.size = size
             self.interpolation = interpolation
-            
+
         def __call__(self, img):
             if isinstance(self.size, int):
                 w, h = img.size
@@ -163,7 +163,7 @@ def main():
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    method.train_val(source_loader, target_loader, val_loader, 
+    method.train_val(source_loader, target_loader, val_loader,
                      model, criterion, optimizer, args)
 
 
