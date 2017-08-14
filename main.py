@@ -93,24 +93,26 @@ def main():
     optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.weight_decay,
-                                nesterov=True)
+                                nesterov=False)
 
     cudnn.benchmark = True
 
     # Data loading code
     traindir = os.path.join(args.data, 'train')
     valdir = os.path.join(args.data, 'validation')
-    
+
     traindir = '/home/dataset/office/domain_adaptation_images/amazon/images'
     valdir = '/home/dataset/office/domain_adaptation_images/webcam/images'
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    
+    
+    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat') / 255,
                                      std=[0.229, 0.224, 0.225])
 
     class MyScale(object):
         def __init__(self, size, interpolation=Image.BILINEAR):
             self.size = size
             self.interpolation = interpolation
-            
+
         def __call__(self, img):
             if isinstance(self.size, int):
                 w, h = img.size
@@ -125,45 +127,44 @@ def main():
                     ow = int(self.size * w / h)
                     return img.resize((ow, oh), self.interpolation)
             else:
-                #b, g, r = img.split()
-                #img = Image.merge("RGB", (r, b, g))
                 return img.resize(self.size, self.interpolation)
 
     source_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(traindir, transforms.Compose([
-            MyScale((224, 224)),
-            transforms.CenterCrop(224),
-            #transforms.RandomSizedCrop(224),
-            #transforms.RandomHorizontalFlip(),
+            #MyScale((224, 224)),
+            transforms.Scale(256),
+            transforms.RandomSizedCrop(224),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     target_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            MyScale((224,244)),
-            transforms.CenterCrop(224),
-            #transforms.RandomSizedCrop(224),
-            #transforms.RandomHorizontalFlip(),
+            #MyScale((224,244)),
+            transforms.Scale(256),
+            transforms.RandomSizedCrop(224),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            MyScale((224, 224)),
+            #MyScale((224, 224)),
+            transforms.Scale(256),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=args.batch_size, shuffle=False,
+        batch_size=1, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
-    method.train_val(source_loader, target_loader, val_loader, 
+    method.train_val(source_loader, target_loader, val_loader,
                      model, criterion, optimizer, args)
 
 

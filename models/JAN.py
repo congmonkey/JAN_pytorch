@@ -63,13 +63,13 @@ class Net(nn.Module):
             {'params': self.fcb.parameters(), 'lr': 10},
             {'params': self.fc.parameters(), 'lr': 10}
         ]
-            
+
     def forward(self, x):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
-        x = x.view(x.size(0), -1)
+        x = x.view(x.size(0), -1).detach()
         x = self.fcb(x)
         y = self.fc(x)
         return y, x
@@ -86,7 +86,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     target_cycle = itertools.cycle(target_loader)
 
     end = time.time()
-    model.train()
+    model.eval()
     for i in range(args.train_iter):
         global global_iter
         global_iter = i
@@ -102,7 +102,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         source_var = torch.autograd.Variable(source_input)
         target_var = torch.autograd.Variable(target_input)
         label_var = torch.autograd.Variable(label)
-        
+
         inputs = torch.cat([source_var, target_var], 0)
         outputs, features = model(inputs)
         source_output, target_output = outputs.chunk(2, 0)
@@ -111,7 +111,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         acc_loss = criterion(source_output, label_var)
         softmax = nn.Softmax()
         jmmd_loss = JMMDLoss([source_feature, softmax(source_output)], [target_feature, softmax(target_output)])
-        
+
         loss = acc_loss + args.alpha * jmmd_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
@@ -126,7 +126,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         loss.backward()
         optimizer.step()
 
-        
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -142,7 +142,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
 
         if i % args.test_iter == 0 and i != 0:
             validate(val_loader, model, criterion, args)
-            model.train()
+            model.eval()
             batch_time.reset()
             data_time.reset()
             losses.reset()
