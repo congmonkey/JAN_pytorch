@@ -23,11 +23,12 @@ def guassian_kernel(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None
     if fix_sigma:
         bandwidth = fix_sigma
     else:
-        bandwidth = torch.sum(L2_distance.data) / (n_samples**2-n_samples)
-    bandwidth *= kernel_mul**(float(-kernel_num)/2)
-    bandwidth_list = [bandwidth * (kernel_mul**kernel_num) for i in xrange(kernel_num)]
-    kernel_val = [torch.exp(L2_distance/-bandwidth_temp) for bandwidth_temp in bandwidth_list]
-    return sum(kernel_val)/len(kernel_val)
+        bandwidth = torch.sum(L2_distance.detach()) / (n_samples**2-n_samples)
+    bandwidth /= kernel_mul ** (kernel_num // 2)
+    bandwidth_list = [bandwidth * (kernel_mul**i) for i in range(kernel_num)]
+    kernel_val = [torch.exp(-L2_distance / bandwidth_temp) for bandwidth_temp in bandwidth_list]
+    return sum(kernel_val)#/len(kernel_val)
+
 
 def MMDLoss(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
     batch_size = int(source.size()[0])
@@ -41,13 +42,16 @@ def MMDLoss(source, target, kernel_mul=2.0, kernel_num=5, fix_sigma=None):
         loss -= kernels[s1, t2] + kernels[s2, t1]
     return loss / float(batch_size)
 
-def JMMDLoss(source_list, target_list, kernel_mul=2.0, kernel_num=5, fix_sigma_list=[None, None]):
+
+def JMMDLoss(source_list, target_list, kernel_muls=[2.0, 2.0], kernel_nums=[5, 1], fix_sigma_list=[None, 1.3]):
     batch_size = int(source_list[0].size()[0])
     layer_num = len(source_list)
     joint_kernels = None
     for i in range(layer_num):
         source = source_list[i]
         target = target_list[i]
+        kernel_mul = kernel_muls[i]
+        kernel_num = kernel_nums[i]
         fix_sigma = fix_sigma_list[i]
         kernels = guassian_kernel(source, target,
             kernel_mul=kernel_mul, kernel_num=kernel_num, fix_sigma=fix_sigma)
