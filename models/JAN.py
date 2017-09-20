@@ -69,7 +69,8 @@ class Net(nn.Module):
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
-        x = x.view(x.size(0), -1).detach()
+        x = x.view(x.size(0), -1)
+        x = torch.autograd.Variable(x.data)
         x = self.fcb(x)
         y = self.fc(x)
         return y, x
