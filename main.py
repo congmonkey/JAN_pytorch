@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 import numpy as np
 
 from utils import *
-
+from mysgd import SGD
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -90,10 +90,10 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay,
-                                nesterov=False)
+    optimizer = SGD([i.copy() for i in args.SGD_param], args.lr,
+                     momentum=args.momentum,
+                     weight_decay=args.weight_decay,
+                     nesterov=False)
 
     cudnn.benchmark = True
 
@@ -105,8 +105,8 @@ def main():
     valdir = '/home/dataset/office/domain_adaptation_images/webcam/images'
     
     
-    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat') / 255,
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat')[(2, 1, 0), :, :] / 255,
+                                     std=[0.225, 0.224, 0.229])
 
     class MyScale(object):
         def __init__(self, size, interpolation=Image.BILINEAR):
@@ -133,7 +133,8 @@ def main():
         datasets.ImageFolder(traindir, transforms.Compose([
             MyScale((224, 224)),
             #transforms.Scale(256),
-            transforms.RandomSizedCrop(224),
+            #transforms.RandomSizedCrop(224),
+            transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
@@ -145,7 +146,8 @@ def main():
         datasets.ImageFolder(valdir, transforms.Compose([
             MyScale((224,244)),
             #transforms.Scale(256),
-            transforms.RandomSizedCrop(224),
+            #transforms.RandomSizedCrop(224),
+            transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
@@ -155,8 +157,8 @@ def main():
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            #MyScale((224, 224)),
-            transforms.Scale(224),
+            MyScale((224, 224)),
+            #transforms.Scale(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
