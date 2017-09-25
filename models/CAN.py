@@ -46,7 +46,7 @@ def create_W(dimensions):
             nn.Linear(in_dim, out_dim),
             nn.ReLU()
         ]
-    return nn.Sequential(nets[:-1]) # Remove last relu
+    return nn.Sequential(*nets[:-1]) # Remove last relu
 
 
 def create_D(dimensions):
@@ -59,7 +59,7 @@ def create_D(dimensions):
     nets[-1] = nn.Sigmoid()
     nets[-2].weight.data.normal_(0, 0.03)
     nets[-2].bias.data.fill_(0.0)
-    return nn.Sequential(nets)
+    return nn.Sequential(*nets)
 
 
 class Net(nn.Module):
@@ -169,6 +169,9 @@ class Net(nn.Module):
             return self.fc_t(self.fcb_t(x))
 
 
+def L2loss(source, target):
+    return torch.sum((source - target) ** 2)
+
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
     batch_time = AverageMeter()
@@ -181,7 +184,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
 
     end = time.time()
     model.eval()
-    cycle_criterion = nn.MSELoss()
+    cycle_criterion = L2loss
     discriminate_criterion = nn.BCELoss()
     for i in range(args.train_iter):
         global global_iter
@@ -194,7 +197,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         target_input, _ = target_cycle.next()
         if target_input.size()[0] < args.batch_size:
             target_input, _ = target_cycle.next()
-        ground_truth = torch.autograd.Variable(
+        domain_label = torch.autograd.Variable(
             torch.cat([torch.zeros(source_input.size()[0]),
                        torch.ones(source_input.size()[0])], 0)).cuda()
         label = label.cuda(async=True)
@@ -207,14 +210,14 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
             (output_s, output_t), (fake_output_t,), \
             (discriminate_s, discriminate_t) = model(inputs)
 
-        acc_loss = criterion(output_s, label_var) + \
-            criterion(fake_output_t, label_var)
-        cycle_loss = cycle_criterion(feature_s, cycle_s) + \
-            cycle_criterion(feature_t, cycle_t)
-        discriminate_loss = discriminate_criterion(discriminate_s, ground_truth) + \
-            discriminate_criterion(discriminate_t, ground_truth)
+        acc_loss = criterion(output_s, label_var) \
+            + criterion(fake_output_t, label_var)
+        cycle_loss = cycle_criterion(feature_s, cycle_s) \
+            + cycle_criterion(feature_t, cycle_t)
+        discriminate_loss = discriminate_criterion(discriminate_s, domain_label) \
+            + discriminate_criterion(discriminate_t, domain_label)
 
-        loss = acc_loss + cycle_loss + discriminate_loss
+        loss = 0.3 * acc_loss + 0.01 * cycle_loss + discriminate_loss
 
         prec1, _ = accuracy(output_s.data, label, topk=(1, 5))
 
