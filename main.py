@@ -32,7 +32,7 @@ parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet18',
                         ' | '.join(model_names) +
                         ' (default: resnet18)')
 parser.add_argument('--model', '-m', metavar='MODEL', default='DAN',
-                    choices=['DAN', 'JAN', 'GRL', 'JANA'])
+                    choices=['DAN', 'JAN', 'GRL', 'JANA', 'CAN'])
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('-c', '--classes', default=None, type=int, metavar='N',
