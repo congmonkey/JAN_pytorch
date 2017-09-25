@@ -46,7 +46,7 @@ def create_W(dimensions):
             nn.Linear(in_dim, out_dim),
             nn.ReLU()
         ]
-    return nn.Sequential(nets[:-1]) # Remove last relu
+    return nn.Sequential(*nets[:-1]) # Remove last relu
 
 
 def create_D(dimensions):
@@ -59,7 +59,7 @@ def create_D(dimensions):
     nets[-1] = nn.Sigmoid()
     nets[-2].weight.data.normal_(0, 0.03)
     nets[-2].bias.data.fill_(0.0)
-    return nn.Sequential(nets)
+    return nn.Sequential(*nets)
 
 
 class Net(nn.Module):
