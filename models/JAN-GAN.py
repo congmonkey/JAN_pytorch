@@ -20,14 +20,18 @@ import math
 from losses import *
 from utils import *
 
-global_iter = 0
-
 ### Convert back-bone model
 class Net(nn.Module):
     def __init__(self, args):
         super(Net, self).__init__()
         # create model
-        if args.pretrained:
+        if args.fromcaffe:
+            print("=> using pre-trained model from caffe '{}'".format(args.arch))
+            import models.caffe_resnet as resnet
+            model = resnet.__dict__[args.arch]()
+            state_dict = torch.load("models/"+args.arch+".pth")
+            model.load_state_dict(state_dict)
+        elif args.pretrained:
             print("=> using pre-trained model '{}'".format(args.arch))
             model = models.__dict__[args.arch](pretrained=True)
         else:
@@ -54,48 +58,21 @@ class Net(nn.Module):
         self.fc.weight.data.normal_(0, 0.01)
         self.fc.bias.data.fill_(0.0)
 
-        self.grl7 = GRLayer()
-        dc_ip1 = nn.Linear(args.bottleneck, 1024)
-        dc_ip1.weight.data.normal_(0, 0.01)
-        dc_ip1.bias.data.fill_(0.0)
-        dc_ip2 = nn.Linear(1024, 1024)
-        dc_ip2.weight.data.normal_(0, 0.01)
-        dc_ip2.bias.data.fill_(0.0)
-        dc_ip3 = nn.Linear(1024, 1)
-        dc_ip3.weight.data.normal_(0, 0.03)
-        dc_ip3.bias.data.fill_(0.0)
-        self.dc7 = nn.Sequential(
-            dc_ip1,
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            dc_ip2,
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            dc_ip3,
-            nn.Sigmoid(),
-        )
-        
         args.SGD_param = [
             {'params': self.origin_feature.parameters(), 'lr': 1,},
-            {'params': self.fcb.parameters(), 'lr': 10,},
-            {'params': self.fc.parameters(), 'lr': 10},
-            {'params': self.dc7.parameters(), 'lr': 10},
+            {'params': self.fcb.parameters(), 'lr': 10},
+            {'params': self.fc.parameters(), 'lr': 10}
         ]
-            
-    def forward(self, x, train_dc=False):
+
+    def forward(self, x):
         x = self.origin_feature(x)
         if self.arch.startswith('densenet'):
             x = F.relu(x, inplace=True)
             x = F.avg_pool2d(x, kernel_size=7)
-        x = x.view(x.size(0), -1)
+        x = x.view(x.size(0), -1).detach()
         x = self.fcb(x)
         y = self.fc(x)
-        if train_dc:
-            dc7 = x.detach()
-        else:
-            dc7 = self.grl7(x)
-        dc7 = self.dc7(dc7)
-        return y, x, dc7
+        return y, x
 
 
 def train_val(source_loader, target_loader, val_loader, model, criterion, optimizer, args):
@@ -109,7 +86,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
     target_cycle = itertools.cycle(target_loader)
 
     end = time.time()
-    model.train()
+    model.eval()
     for i in range(args.train_iter):
         global global_iter
         global_iter = i
@@ -126,44 +103,22 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         target_var = torch.autograd.Variable(target_input)
         label_var = torch.autograd.Variable(label)
 
-###         if args.model == 'jan':
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var, train_dc=True)
-###                 target_output, target_feature, target_dc = model(target_var, train_dc=True)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 optimizer.step()
-###             for _ in range(0):
-###                 source_output, source_feature, source_dc = model(source_var)
-###                 target_output, target_feature, target_dc = model(target_var)
-###                 loss = args.alpha * Wasserstein_loss(source_dc, target_dc)
-###                 optimizer.zero_grad()
-###                 loss.backward()
-###                 for p in optimizer.param_groups[-1]['params']:
-###                     p.grad.data.zero_()
-###                 optimizer.step()
-
-        
         inputs = torch.cat([source_var, target_var], 0)
-        outputs, features, dcs = model(inputs)
-
+        outputs, features = model(inputs)
         source_output, target_output = outputs.chunk(2, 0)
-        sourde_feature, target_feature = features.chunk(2, 0)
-        source_dc, target_dc = dcs.chunk(2, 0)
-     
-        acc_loss = criterion(source_output, label_var)
+        source_feature, target_feature = features.chunk(2, 0)
 
+        acc_loss = criterion(source_output, label_var)
         softmax = nn.Softmax()
-        W_loss = Wasserstein_loss(source_dc, target_dc, softmax(source_output), softmax(target_output))
-            
-        loss = acc_loss + args.alpha * W_loss
+        jmmd_loss = JMMDLoss([source_feature, softmax(source_output)], [target_feature, softmax(target_output)])
+
+        loss = acc_loss + args.alpha * jmmd_loss
 
         prec1, _ = accuracy(source_output.data, label, topk=(1, 5))
 
         losses.update(loss.data[0], args.batch_size)
-        loss1 = W_loss.data[0]
-        loss2 = 0
+        loss1 = jmmd_loss.data[0]
+        loss2 = acc_loss.data[0]
         top1.update(prec1[0], args.batch_size)
 
         # compute gradient and do SGD step
@@ -171,7 +126,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         loss.backward()
         optimizer.step()
 
-        
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -187,7 +142,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
 
         if i % args.test_iter == 0 and i != 0:
             validate(val_loader, model, criterion, args)
-            model.train()
+            model.eval()
             batch_time.reset()
             data_time.reset()
             losses.reset()
@@ -211,7 +166,7 @@ def validate(val_loader, model, criterion, args):
         target_var = torch.autograd.Variable(target, volatile=True)
 
         # compute output
-        output, _, _ = model(input_var)
+        output, _ = model(input_var)
         loss = criterion(output, target_var)
 
         # measure accuracy and record loss
@@ -228,19 +183,3 @@ def validate(val_loader, model, criterion, args):
           .format(top1=top1, top5=top5))
 
     return top1.avg
-
-class GRLayer(torch.autograd.Function):
-    def __init__(self, max_iter=10000, alpha=10., high=1.):
-        super(GRLayer, self).__init__()
-        self.total = float(max_iter)
-        self.alpha = alpha
-        self.high = high
-        
-    def forward(self, input):
-        return input
-    
-    def backward(self, gradOutput):
-        global global_iter
-        prog = global_iter/self.total
-        lr = 2.*self.high / (1 + math.exp(-self.alpha * prog)) - self.high
-        return (-lr) * gradOutput

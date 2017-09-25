@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 import numpy as np
 
 from utils import *
-
+from mysgd import SGD
 
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
@@ -65,7 +65,7 @@ parser.add_argument('--print-freq', '-p', default=100, type=int,
                     metavar='N', help='print frequency (default: 10)')
 parser.add_argument('--train-iter', default=50000, type=int,
                     metavar='N', help='')
-parser.add_argument('--test-iter', default=1000, type=int,
+parser.add_argument('--test-iter', default=300, type=int,
                     metavar='N', help='')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
@@ -90,10 +90,10 @@ def main():
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda()
 
-    optimizer = torch.optim.SGD([i.copy() for i in args.SGD_param], args.lr,
-                                momentum=args.momentum,
-                                weight_decay=args.weight_decay,
-                                nesterov=False)
+    optimizer = SGD([i.copy() for i in args.SGD_param], args.lr,
+                     momentum=args.momentum,
+                     weight_decay=args.weight_decay,
+                     nesterov=False)
 
     cudnn.benchmark = True
 
@@ -105,8 +105,8 @@ def main():
     valdir = '/home/dataset/office/domain_adaptation_images/webcam/images'
     
     
-    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat') / 255,
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=torch.load('./models/resnet_mean.dat')[(2, 1, 0), :, :] / 255,
+                                     std=[0.225, 0.224, 0.229])
 
     class MyScale(object):
         def __init__(self, size, interpolation=Image.BILINEAR):
@@ -131,9 +131,10 @@ def main():
 
     source_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(traindir, transforms.Compose([
-            #MyScale((224, 224)),
-            transforms.Scale(256),
-            transforms.RandomSizedCrop(224),
+            MyScale((224, 224)),
+            #transforms.Scale(256),
+            #transforms.RandomSizedCrop(224),
+            transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
@@ -143,9 +144,10 @@ def main():
 
     target_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            #MyScale((224,244)),
-            transforms.Scale(256),
-            transforms.RandomSizedCrop(224),
+            MyScale((224,244)),
+            #transforms.Scale(256),
+            #transforms.RandomSizedCrop(224),
+            transforms.CenterCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize,
@@ -155,13 +157,13 @@ def main():
 
     val_loader = torch.utils.data.DataLoader(
         datasets.ImageFolder(valdir, transforms.Compose([
-            #MyScale((224, 224)),
-            transforms.Scale(256),
+            MyScale((224, 224)),
+            #transforms.Scale(224),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             normalize,
         ])),
-        batch_size=1, shuffle=False,
+        batch_size=1, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     method.train_val(source_loader, target_loader, val_loader,
