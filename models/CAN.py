@@ -39,7 +39,7 @@ class GRLayer(torch.autograd.Function):
         return (-lr) * gradOutput
 
 
-def create_G(dimensions):
+def create_W(dimensions):
     nets = []
     for in_dim, out_dim in zip(dimensions[:-1], dimensions[1:]):
         nets += [
@@ -57,6 +57,8 @@ def create_D(dimensions):
             nn.ReLU()
         ]
     nets[-1] = nn.Sigmoid()
+    nets[-2].weight.data.normal_(0, 0.03)
+    nets[-2].bias.data.fill_(0.0)
     return nn.Sequential(nets)
 
 
@@ -103,11 +105,11 @@ class Net(nn.Module):
         self.fc_t.weight.data.normal_(0, 0.01)
         self.fc_t.bias.data.fill_(0.0)
 
-        self.G_st = create_G([args.bottleneck, args.bottleneck])
-        self.G_ts = create_G([args.bottleneck, args.bottleneck])
+        self.W_st = create_W([args.bottleneck, args.bottleneck])
+        self.W_ts = create_W([args.bottleneck, args.bottleneck])
 
-        self.D_s = create_G([args.bottleneck, 1024, 1])
-        self.D_t = create_G([args.bottleneck, 1024, 1])
+        self.D_s = create_D([args.bottleneck, 1024, 1])
+        self.D_t = create_D([args.bottleneck, 1024, 1])
 
         self.grl_s = GRLayer()
         self.grl_t = GRLayer()
@@ -125,8 +127,8 @@ class Net(nn.Module):
                 'lr': 10
             },
             {
-                'params': itertools.chain(self.G_ts.parameters(),
-                                          self.G_st.parameters()),
+                'params': itertools.chain(self.W_ts.parameters(),
+                                          self.W_st.parameters()),
                 'lr': 10
             },
             {
@@ -149,10 +151,10 @@ class Net(nn.Module):
             feature_t = self.fcb_t(orign_feature_t)
             output_s = self.fc_s(feature_s)
             output_t = self.fc_t(feature_t)
-            fake_feature_t = self.G_st(feature_s)
-            fake_feature_s = self.G_ts(feature_t)
-            cycle_s = self.G_ts(fake_feature_t)
-            cycle_t = self.G_st(fake_feature_s)
+            fake_feature_t = self.W_st(feature_s)
+            fake_feature_s = self.W_ts(feature_t)
+            cycle_s = self.W_ts(fake_feature_t)
+            cycle_t = self.W_st(fake_feature_s)
             fake_output_t = self.fc_t(fake_feature_t)
             discriminate_s = self.D_s(torch.cat([self.grl_s(fake_feature_s),
                                                  self.grl_s(feature_s)], 0))
