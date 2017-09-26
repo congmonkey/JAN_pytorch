@@ -24,14 +24,14 @@ global_iter = 0
 
 
 class GRLayer(torch.autograd.Function):
-    def __init__(self, max_iter=10000, alpha=10., high=1.):
+    def __init__(self, max_iter=2000, alpha=10., high=1.):
         super(GRLayer, self).__init__()
         self.total = float(max_iter)
         self.alpha = alpha
         self.high = high
 
     def forward(self, input):
-        return input
+        return input.view_as(input)
 
     def backward(self, gradOutput):
         prog = global_iter / self.total
@@ -108,11 +108,13 @@ class Net(nn.Module):
         self.W_st = create_W([args.bottleneck, args.bottleneck])
         self.W_ts = create_W([args.bottleneck, args.bottleneck])
 
-        self.D_s = create_D([args.bottleneck, 1024, 1])
-        self.D_t = create_D([args.bottleneck, 1024, 1])
+        self.D_s = create_D([args.bottleneck, 1024, 1024, 1])
+        self.D_t = create_D([args.bottleneck, 1024, 1024, 1])
 
-        self.grl_s = GRLayer()
-        self.grl_t = GRLayer()
+        self.grl_ss = GRLayer()
+        self.grl_tt = GRLayer()
+        self.grl_st = GRLayer()
+        self.grl_ts = GRLayer()
 
         args.SGD_param = [
             {'params': self.origin_feature.parameters(), 'lr': 1,},
@@ -151,15 +153,15 @@ class Net(nn.Module):
             feature_t = self.fcb_t(orign_feature_t)
             output_s = self.fc_s(feature_s)
             output_t = self.fc_t(feature_t)
-            fake_feature_t = self.W_st(feature_s)
-            fake_feature_s = self.W_ts(feature_t)
+            fake_feature_t = self.W_st(feature_s) + feature_s
+            fake_feature_s = self.W_ts(feature_t) + feature_t
             cycle_s = self.W_ts(fake_feature_t)
             cycle_t = self.W_st(fake_feature_s)
             fake_output_t = self.fc_t(fake_feature_t)
-            discriminate_s = self.D_s(torch.cat([self.grl_s(fake_feature_s),
-                                                 self.grl_s(feature_s)], 0))
-            discriminate_t = self.D_t(torch.cat([self.grl_t(fake_feature_t),
-                                                 self.grl_t(feature_t)], 0))
+            discriminate_s = self.D_s(torch.cat([self.grl_ss(fake_feature_s),
+                                                 self.grl_st(feature_s)], 0))
+            discriminate_t = self.D_t(torch.cat([self.grl_ts(fake_feature_t),
+                                                 self.grl_tt(feature_t)], 0))
             return (feature_s, feature_t), \
                    (cycle_s, cycle_t), \
                    (output_s, output_t),\
@@ -217,7 +219,8 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         discriminate_loss = discriminate_criterion(discriminate_s, domain_label) \
             + discriminate_criterion(discriminate_t, domain_label)
 
-        loss = 0.3 * acc_loss + 0.01 * cycle_loss + discriminate_loss
+        loss = acc_loss + args.alpha * cycle_loss + args.beta * discriminate_loss
+        # loss = discriminate_loss
 
         prec1, _ = accuracy(output_s.data, label, topk=(1, 5))
 
@@ -231,7 +234,7 @@ def train_val(source_loader, target_loader, val_loader, model, criterion, optimi
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
